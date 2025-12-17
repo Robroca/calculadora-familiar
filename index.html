@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuestras Cuentas 💰</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Un poco de estilo 'casero' y limpio */
+        body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: auto; padding: 20px; background: #f0f2f5; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; }
+        button { background: #007bff; color: white; font-weight: bold; border: none; cursor: pointer; }
+        .item-gasto { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 5px 0; }
+        .debe { color: #dc3545; font-weight: bold; }
+        .recibe { color: #28a745; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🏠 Gastos de la Familia</h1>
+
+    <div class="card">
+        <h3>Añadir Gasto</h3>
+        <input type="text" id="persona" placeholder="¿Quién pagó? (Ej: Mamá)">
+        <input type="number" id="monto" placeholder="¿Cuánto? (Ej: 45.50)">
+        <input type="text" id="concepto" placeholder="¿En qué? (Ej: Cena)">
+        <button onclick="subirGasto()">Guardar Gasto</button>
+    </div>
+
+    <div class="card">
+        <h3>Historial</h3>
+        <div id="historial">Cargando...</div>
+    </div>
+
+    <div class="card">
+        <h3>Balances Finales</h3>
+        <div id="balances"></div>
+    </div>
+
+    <script>
+        // CONFIGURACIÓN (Pon tus claves aquí)
+        const SB_URL = "https://gggqhwqemifgmufrdgvg.supabase.co";
+        const SB_KEY = "sb_publishable_1zB1sUQBQe-5t3S5nXTj2A_CWlUIGDD";
+        const supabase = supabase.createClient(SB_URL, SB_KEY);
+
+        // 1. Guardar en la base de datos
+        async function subirGasto() {
+            const nombre = document.getElementById('persona').value;
+            const monto = parseFloat(document.getElementById('monto').value);
+            const concepto = document.getElementById('concepto').value;
+
+            if(!nombre || !monto) return alert("Rellena nombre y monto");
+
+            const { error } = await supabase.from('registros').insert([{ nombre, monto, concepto }]);
+            if (error) console.log(error);
+            else location.reload(); // Recargamos para ver los cambios
+        }
+
+        // 2. Leer y Calcular
+        async function cargarDatos() {
+            let { data: registros, error } = await supabase.from('registros').select('*');
+            if (error) return;
+
+            const historialDiv = document.getElementById('historial');
+            historialDiv.innerHTML = "";
+            
+            let totalGeneral = 0;
+            let pagosPorPersona = {};
+
+            registros.forEach(g => {
+                totalGeneral += g.monto;
+                pagosPorPersona[g.nombre] = (pagosPorPersona[g.nombre] || 0) + g.monto;
+                historialDiv.innerHTML += `<div class="item-gasto"><span>${g.nombre} (${g.concepto})</span> <b>${g.monto}€</b></div>`;
+            });
+
+            // Lógica de Reparto
+            const personas = Object.keys(pagosPorPersona);
+            const cuota = totalGeneral / personas.length;
+            const balancesDiv = document.getElementById('balances');
+            balancesDiv.innerHTML = `<p>Total: ${totalGeneral.toFixed(2)}€ | <b>Cuota: ${cuota.toFixed(2)}€</b></p><hr>`;
+
+            personas.forEach(p => {
+                let diff = pagosPorPersona[p] - cuota;
+                let clase = diff < 0 ? 'debe' : 'recibe';
+                let texto = diff < 0 ? `debe pagar ${Math.abs(diff).toFixed(2)}€` : `recibe ${diff.toFixed(2)}€`;
+                balancesDiv.innerHTML += `<p class="${clase}">${p}: ${texto}</p>`;
+            });
+        }
+
+        cargarDatos();
+    </script>
+</body>
+</html>
