@@ -7,33 +7,36 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; padding: 20px; background-color: #f0f2f5; }
-        h1 { text-align: center; color: #1a73e8; }
+        h1 { text-align: center; color: #1a73e8; cursor: pointer; user-select: none; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
         input, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; font-size: 16px; }
         button { background-color: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background-color: #1557b0; }
-        .gasto-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .btn-delete { background-color: #ff4d4d; color: white; width: auto; padding: 5px 10px; font-size: 12px; margin: 0; }
+        .btn-reset { background-color: #dc3545; display: none; margin-bottom: 20px; }
+        .gasto-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .info-gasto { flex-grow: 1; }
         .resultado { padding: 15px; border-radius: 8px; margin-top: 10px; font-weight: bold; }
         .debe { background-color: #ffebee; color: #c62828; }
         .recibe { background-color: #e8f5e9; color: #2e7d32; }
-        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
     </style>
 </head>
 <body>
 
-    <h1>💰 Cuentas Familiares</h1>
+    <h1 onclick="activarReset()">💰 Cuentas Familiares</h1>
+    
+    <button id="btnReset" class="btn-reset" onclick="resetearCuentas()">⚠️ BORRAR TODO EL HISTORIAL</button>
 
     <div class="card">
         <h3>Añadir Gasto</h3>
         <input type="text" id="nombre" placeholder="¿Quién pagó?">
         <input type="number" id="monto_input" placeholder="¿Cuántos euros?">
-        <input type="text" id="concepto" placeholder="¿En qué? (Ej: Supermercado)">
+        <input type="text" id="concepto" placeholder="¿En qué?">
         <button onclick="guardarGasto()">Guardar Gasto</button>
     </div>
 
     <div class="card">
-        <h3>Historial de Gastos</h3>
-        <div id="lista-gastos">Cargando datos...</div>
+        <h3>Historial (Toca 🗑️ para borrar uno)</h3>
+        <div id="lista-gastos">Cargando...</div>
     </div>
 
     <div class="card">
@@ -42,80 +45,91 @@
     </div>
 
     <script>
-        // --- 1. CONFIGURACIÓN (RELLENA ESTO) ---
-        // Ve a Supabase -> Settings -> API y copia tus valores aquí:
+        // --- 1. CONFIGURACIÓN ---
         const SB_URL = "https://gggqhwqemifgmufrdgvg.supabase.co"; 
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnZ3Fod3FlbWlmZ211ZnJkZ3ZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU5ODE4ODAsImV4cCI6MjA4MTU1Nzg4MH0.hsxZ1F_r1I58xWfWFRNnnEzQ-hoUYWTFF1azVcO7LtQ"; 
-        
         const _supabase = supabase.createClient(SB_URL, SB_KEY);
 
-        // --- 2. FUNCIÓN PARA GUARDAR ---
+        // --- 2. GUARDAR GASTO ---
         async function guardarGasto() {
             const n = document.getElementById('nombre').value;
             const e = parseFloat(document.getElementById('monto_input').value);
             const c = document.getElementById('concepto').value;
 
-            if (!n || isNaN(e)) return alert("Por favor, rellena nombre y euros");
+            if (!n || isNaN(e)) return alert("Rellena nombre y euros");
 
-            // Enviamos 'euros' que es como se llama tu columna ahora
             const { error } = await _supabase
                 .from('registros')
                 .insert([{ nombre: n, euros: e, concepto: c }]);
 
-            if (error) {
-                alert("Error al guardar: " + error.message);
-            } else {
-                location.reload(); 
+            if (error) alert("Error: " + error.message);
+            else location.reload();
+        }
+
+        // --- 3. BORRAR UN APUNTE INDIVIDUAL ---
+        async function borrarApunte(id) {
+            if (!confirm("¿Borrar este gasto?")) return;
+            const { error } = await _supabase.from('registros').delete().eq('id', id);
+            if (error) alert("Error al borrar");
+            else location.reload();
+        }
+
+        // --- 4. RESETEAR TODO (CON SEGURIDAD) ---
+        let clics = 0;
+        function activarReset() {
+            clics++;
+            if (clics === 3) {
+                document.getElementById('btnReset').style.display = 'block';
+                setTimeout(() => { document.getElementById('btnReset').style.display = 'none'; clics = 0; }, 5000);
             }
         }
 
-        // --- 3. FUNCIÓN PARA LEER Y CALCULAR ---
-        async function cargarYCulcular() {
-            let { data: registros, error } = await _supabase.from('registros').select('*');
-            if (error) return console.error(error);
+        async function resetearCuentas() {
+            if (confirm("¿Borrar TODO? No hay marcha atrás.") && prompt("Escribe 'BORRAR':") === 'BORRAR') {
+                const { error } = await _supabase.from('registros').delete().neq('id', 0);
+                location.reload();
+            }
+        }
 
+        // --- 5. CARGAR Y CALCULAR ---
+        async function cargarYCulcular() {
+            let { data: registros, error } = await _supabase.from('registros').select('*').order('created_at', { ascending: false });
             const listaDiv = document.getElementById('lista-gastos');
             const repartoDiv = document.getElementById('reparto');
-            listaDiv.innerHTML = "";
             
             if (!registros || registros.length === 0) {
-                listaDiv.innerHTML = "No hay gastos anotados.";
+                listaDiv.innerHTML = "No hay gastos.";
                 return;
             }
 
             let totalGeneral = 0;
             let pagosPorPersona = {};
+            listaDiv.innerHTML = "";
 
-            // Listar historial y sumar totales
             registros.forEach(r => {
                 totalGeneral += r.euros;
                 pagosPorPersona[r.nombre] = (pagosPorPersona[r.nombre] || 0) + r.euros;
                 listaDiv.innerHTML += `
                     <div class="gasto-item">
-                        <span><strong>${r.nombre}</strong>: ${r.concepto}</span>
-                        <span>${r.euros.toFixed(2)}€</span>
+                        <div class="info-gasto">
+                            <strong>${r.nombre}</strong>: ${r.euros}€ (${r.concepto})
+                        </div>
+                        <button class="btn-delete" onclick="borrarApunte(${r.id})">🗑️</button>
                     </div>`;
             });
 
-            // Lógica de Reparto
             const personas = Object.keys(pagosPorPersona);
-            const cuotaPersona = totalGeneral / personas.length;
-            
-            repartoDiv.innerHTML = `<p>Gasto Total: <b>${totalGeneral.toFixed(2)}€</b></p>`;
-            repartoDiv.innerHTML += `<p>Cuota por persona: <b>${cuotaPersona.toFixed(2)}€</b></p><hr>`;
+            const cuota = totalGeneral / personas.length;
+            repartoDiv.innerHTML = `<p>Gasto Total: ${totalGeneral.toFixed(2)}€</p><hr>`;
 
             personas.forEach(p => {
-                let balance = pagosPorPersona[p] - cuotaPersona;
-                let clase = balance >= 0 ? 'recibe' : 'debe';
-                let texto = balance >= 0 ? `recibe ${balance.toFixed(2)}€` : `debe pagar ${Math.abs(balance).toFixed(2)}€`;
-                repartoDiv.innerHTML += `<div class="resultado ${clase}">${p} ${texto}</div><br>`;
+                let bal = pagosPorPersona[p] - cuota;
+                let clase = bal >= 0 ? 'recibe' : 'debe';
+                repartoDiv.innerHTML += `<div class="resultado ${clase}">${p}: ${bal >= 0 ? 'Recibe' : 'Paga'} ${Math.abs(bal).toFixed(2)}€</div><br>`;
             });
         }
 
         cargarYCulcular();
-    </script>
-</body>
-</html>
     </script>
 </body>
 </html>
